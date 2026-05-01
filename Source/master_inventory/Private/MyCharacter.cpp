@@ -13,6 +13,8 @@
 #include "InventoryWidget.h"
 #include "ItemDatabaseComponent.h"
 #include "AchievementComponent.h"
+#include <Kismet/KismetSystemLibrary.h>
+#include <Kismet/GameplayStatics.h>
 
 // Sets default values
 AMyCharacter::AMyCharacter()
@@ -65,8 +67,13 @@ void AMyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		if (UseAllItemAction) {
 			EnhancedInput->BindAction(UseAllItemAction, ETriggerEvent::Triggered, this, &AMyCharacter::UseAllItem);
 		}
+		if (FireAction) {
+			EnhancedInput->BindAction(FireAction, ETriggerEvent::Triggered, this, &AMyCharacter::FireShotgun);
+		}
 	}
 }
+
+
 
 void AMyCharacter::Look(const FInputActionValue& value)
 {
@@ -114,6 +121,59 @@ void AMyCharacter::UseAllItem(const FInputActionValue& value)
 	InventoryComp->UseAllItem();
 }
 
+void AMyCharacter::FireShotgun(const FInputActionValue& value)
+{
+	/*
+	float ShotgunMinSpread = 5.f;
+	float ShotgunMaxSpread = 30.f;
+	float ShotgunRange = 2000.f;
+	int32 SHotgunPelletCount = 8;
+	*/
+	
+	FVector Start = GetActorLocation() + FVector{ 0, 0, 80 };//총구지점같은게 있으면 좋을듯
+	FVector ForwardVector = GetActorForwardVector();//조준방향
+	ForwardVector = (GetCameraLookAt() - GetActorLocation()).GetSafeNormal();;//카메라가 바라보는 지점 방향
+	float Range = ShotgunRange; // 샷건 사거리
+	int32 PelletCount = SHotgunPelletCount; // 샷건 산탄 수
+	float SpreadRadius = ShotgunCurrentSpread; // 산탄 퍼짐 정도
+	ShotgunCurrentSpread = FMath::Clamp(ShotgunCurrentSpread + 10.f, ShotgunMinSpread, ShotgunMaxSpread);//산탄도 증가(다음 사격에 적용
+	//자신 제외
+	TArray<AActor*> ActorsToIgnore;
+	ActorsToIgnore.Add(this);
+	FCollisionQueryParams TraceParams;
+	TraceParams.AddIgnoredActor(this);
+
+	for (int32 i = 0; i < PelletCount; ++i)
+	{
+		// 최대 SpreadRadius각도로 ForwardVector를 회전한 값 생성(산탄 퍼짐)
+		float RandomYaw = FMath::FRandRange(-SpreadRadius, SpreadRadius);
+		float RandomPitch = FMath::FRandRange(-SpreadRadius, SpreadRadius);
+
+		FRotator RandomYawPitch = FRotator(RandomPitch, RandomYaw, 0);
+		FVector PelletDirection = RandomYawPitch.RotateVector(ForwardVector);
+
+		// 최종 사격지점
+		FVector End = Start + (PelletDirection * Range);
+
+		FHitResult HitResult;
+		TArray<FHitResult> HitResults;
+		UKismetSystemLibrary::LineTraceMulti(
+			GetWorld(),
+			Start,
+			End,
+			UEngineTypes::ConvertToTraceType(ECollisionChannel::ECC_Visibility),
+			false,
+			ActorsToIgnore,
+			EDrawDebugTrace::ForDuration,
+			HitResults,
+			true,
+			FLinearColor::Red,
+			FLinearColor::Green,
+			1.f
+		);
+	}
+}
+
 // Called when the game starts or when spawned
 void AMyCharacter::BeginPlay()
 {
@@ -145,11 +205,39 @@ void AMyCharacter::BeginPlay()
 		}
 	}
 }
-
 // Called every frame
 void AMyCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	ShotgunCurrentSpread = FMath::Clamp(ShotgunCurrentSpread - (recoilRecoverySpeed * DeltaTime), ShotgunMinSpread, ShotgunMaxSpread);
 
+	GEngine->AddOnScreenDebugMessage(0, 1, FColor::White, FString::Printf(TEXT("Current Recoil Angle : %02f"), ShotgunCurrentSpread));
 }
+
+FVector AMyCharacter::GetCameraLookAt()
+{
+	APlayerCameraManager* CamManager = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0);
+
+	FHitResult HitResult;
+	float TraceDistance = 10000.f;
+	FVector Start = CamManager->GetCameraLocation();
+	FVector End = Start + (CamManager->GetCameraRotation().Vector() * TraceDistance); // 최대 거리
+
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this); // 나(캐릭터)는 제외
+
+	FVector ActualLookAtPoint;
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, Params))
+	{
+		// 충돌한 지점 (카메라가 정확히 조준하고 있는 실제 위치)
+		ActualLookAtPoint = HitResult.ImpactPoint;
+	}
+	else
+	{
+		// 충돌하지 않았으면 최대 거리 지점 반환
+		ActualLookAtPoint = End;
+	}
+	return ActualLookAtPoint;
+}
+
 

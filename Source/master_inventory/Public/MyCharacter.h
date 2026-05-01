@@ -53,11 +53,22 @@ public:
 	UInputAction* LookAction;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
 	UInputAction* MoveAction;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
+	UInputAction* FireAction;
 
 	bool bIsInventoryOpen = false;
 
 	bool AddItemToInventory(int32 ItemID, int32 AMount = 1);
 	bool RemoveItemFromInventory(int32 ItemID);
+
+	float ShotgunMinSpread = 5.f;
+	float ShotgunCurrentSpread = ShotgunMinSpread;
+	float recoilRecoverySpeed = 25.f;
+	float ShotgunMaxSpread = 30.f;
+	float ShotgunRange = 2000.f;
+	int32 SHotgunPelletCount = 8;
+
+
 
 protected:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -69,11 +80,14 @@ protected:
 	void Move(const FInputActionValue& value);
 	UFUNCTION()
 	void UseAllItem(const FInputActionValue& value);
+	UFUNCTION()
+	void FireShotgun(const FInputActionValue& value);
 
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
-
+private:
+	FVector GetCameraLookAt();
 
 };
